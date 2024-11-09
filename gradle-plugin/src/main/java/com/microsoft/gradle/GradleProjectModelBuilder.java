@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
@@ -63,12 +64,12 @@ public class GradleProjectModelBuilder implements ToolingModelBuilder {
 	}
 
 	public Object buildAll(String modelName, Project project) {
-		int majorVersion = Integer.parseInt(project.getGradle().getGradleVersion().split("\\.")[0]);
-
 		cachedTasks.clear();
 
 		GradleProjectModel rootModel = null;
-		if (majorVersion < 5) {
+		int cmpVersion = GradleVersion.current().compareTo(GradleVersion.version("5.0.0"));
+
+		if (cmpVersion == -1) {
 			rootModel = buildModel(project, project);
 		} else {
 			DefaultGradleProject gradleProject = (DefaultGradleProject) this.registry
@@ -109,23 +110,20 @@ public class GradleProjectModelBuilder implements ToolingModelBuilder {
 
 		ClassPath classpath = ((DefaultScriptHandler) buildScript).getScriptClassPath();
 
-		List<String> scriptClasspaths = new ArrayList<>();
-
-		classpath.getAsFiles().forEach((file) -> {
-			scriptClasspaths.add(file.getAbsolutePath());
-		});
+		List<String> scriptClasspaths = classpath.getAsFiles().stream().map(file -> file.getAbsolutePath())
+				.collect(Collectors.toList());
 
 		GradleDependencyNode node = generateDefaultGradleDependencyNode(project);
+
 		List<String> plugins = getPlugins(project);
+
 		List<GradleClosure> closures = getPluginClosures(project);
-		List<GradleProjectModel> subModels = new ArrayList<>();
+
 		Map<String, Project> childProjects = project.getChildProjects();
-		for (Project childProject : childProjects.values()) {
-			GradleProjectModel subModel = buildModel(rootProject, childProject);
-			if (subModel != null) {
-				subModels.add(subModel);
-			}
-		}
+
+		List<GradleProjectModel> subModels = childProjects.values().stream()
+				.map(childProject -> buildModel(rootProject, childProject)).filter(subModel -> subModel != null)
+				.collect(Collectors.toList());
 
 		List<GradleTask> tasks = getGradleTasks(rootProject, project);
 
